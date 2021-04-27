@@ -21,6 +21,7 @@ const engine = new StormDB.localFileEngine("./stormdb.json");
 const db = new StormDB(engine);
 
 const STORAGE_PATH = `${__dirname}/storage`;
+const STORAGE_ENDPOINT = `/static`;
 
 if (process.env.NODE_ENV === "development") {
   app.use(logger());
@@ -42,7 +43,7 @@ db.default({ comments: [] });
 
 app.use(cors());
 app.use(bodyParser());
-app.use(mount("/static", static(STORAGE_PATH)));
+app.use(mount(STORAGE_ENDPOINT, static(STORAGE_PATH)));
 
 /* *********
  * ROUTES  *
@@ -59,7 +60,9 @@ router.post("/upload", upload.any(), async (ctx) => {
 });
 
 router.get("/files", async (ctx) => {
-  ctx.body = await fs.readdir(STORAGE_PATH);
+  ctx.body = (await fs.readdir(STORAGE_PATH)).map(
+    (fileName) => `http://localhost:8080${STORAGE_ENDPOINT}/${fileName}`
+  );
 });
 
 router.get("/comments", async (ctx) => {
