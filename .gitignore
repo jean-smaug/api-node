@@ -1,5 +1,6 @@
 # Custom
 storage/
+stormdb.json
 
 # Logs
 logs
