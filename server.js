@@ -4,6 +4,7 @@ const StormDB = require("stormdb");
 
 const fsSync = require("fs");
 const fs = require("fs/promises");
+const path = require("path");
 
 const multer = require("@koa/multer");
 const logger = require("koa-logger");
@@ -13,6 +14,7 @@ const mount = require("koa-mount");
 const cors = require("@koa/cors");
 
 const { v4: uuid } = require("uuid");
+const mime = require("mime-types");
 
 const app = new Koa();
 const router = new Router();
@@ -35,7 +37,7 @@ if (!fsSync.existsSync(STORAGE_PATH)) {
   fsSync.mkdirSync(STORAGE_PATH);
 }
 
-db.default({ comments: [] });
+db.default({ items: [] });
 
 /* *************
  * MIDDLEWARE  *
@@ -49,42 +51,78 @@ app.use(mount(STORAGE_ENDPOINT, static(STORAGE_PATH)));
  * ROUTES  *
  ********* */
 
-router.post("/upload", upload.any(), async (ctx) => {
-  await Promise.all(
-    ctx.files.map(async (file) => {
-      fs.writeFile(`${STORAGE_PATH}/${file.originalname}`, file.buffer);
-    })
+router.post("/upload", upload.single("image"), async (ctx) => {
+  const { name } = ctx.request.body;
+
+  await fs.writeFile(
+    `${STORAGE_PATH}/${
+      name
+        ? `${name}.${mime.extension(ctx.file.mimetype)}`
+        : ctx.file.originalname
+    }`,
+    ctx.file.buffer
   );
 
   ctx.status = 201;
 });
 
 router.get("/files", async (ctx) => {
+  console.log(
+    (await fs.readdir(STORAGE_PATH)).map((fileName) =>
+      path.basename(fileName, path.extname(fileName))
+    )
+  );
+
   ctx.body = (await fs.readdir(STORAGE_PATH)).map(
     (fileName) => `http://localhost:8080${STORAGE_ENDPOINT}/${fileName}`
   );
 });
 
-router.get("/comments", async (ctx) => {
-  ctx.body = db.get("comments").value();
+router.get("/files/:name", async (ctx) => {
+  const files = (await fs.readdir(STORAGE_PATH)).map((fileName) => {
+    const extension = path.extname(fileName);
+
+    return {
+      name: path.basename(fileName, extension),
+      extension,
+    };
+  });
+
+  const file = files.find((file) => file.name === ctx.params.name);
+
+  ctx.body = `http://localhost:8080${STORAGE_ENDPOINT}/${file.name}${file.extension}`;
 });
 
-router.post("/comments", async (ctx) => {
-  const { comment } = ctx.request.body;
+router.get("/items", async (ctx) => {
+  ctx.body = db.get("items").value() || [];
+});
 
-  if (!comment) {
+router.post("/items", async (ctx) => {
+  const { title, description } = ctx.request.body;
+
+  if (!title || !description) {
     ctx.status = 400;
-    ctx.body = "`comment` is required";
+    ctx.body = "`title` and `description` are required";
   }
 
-  db.get("comments")
+  const id = uuid();
+
+  db.get("items")
     .push({
-      id: uuid(),
-      value: comment,
+      id,
+      title,
+      description,
     })
     .save();
 
   ctx.status = 201;
+  ctx.body = { id };
+});
+
+router.delete("/items", async (ctx) => {
+  db.get("items").delete();
+
+  ctx.status = 204;
 });
 
 app.use(router.routes()).use(router.allowedMethods());
