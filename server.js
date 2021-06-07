@@ -54,6 +54,12 @@ app.use(mount(STORAGE_ENDPOINT, static(STORAGE_PATH)));
 router.post("/upload", upload.single("image"), async (ctx) => {
   const { name } = ctx.request.body;
 
+  if (!ctx.file) {
+    ctx.body = "`image` should contains a file";
+
+    return;
+  }
+
   await fs.writeFile(
     `${STORAGE_PATH}/${
       name
